@@ -148,11 +148,14 @@ class ImporterSource(DescriptionBasedSource):
         )
         # delete filename since it is used by beancount-import to determine if the
         # entry is from journal.
-        imported_entry.meta.pop("filename")
+        if "filename" in imported_entry.meta:
+            imported_entry.meta.pop("filename")
         return result
 
 
 def get_info(raw_entry: Directive) -> dict:
+    if not "filename" in raw_entry.meta:
+        return {}
     if raw_entry.meta["filename"].endswith(".beancount"):
         ftype = "text/plain"
     else:
