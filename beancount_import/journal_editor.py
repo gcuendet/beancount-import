@@ -19,7 +19,18 @@ journal, and modifies only the lines occupied by the directives explicitly
 included in the change set.
 """
 
-from typing import Union, Dict, Tuple, List, Optional, Set, NamedTuple, Sequence, FrozenSet, Iterable
+from typing import (
+    Union,
+    Dict,
+    Tuple,
+    List,
+    Optional,
+    Set,
+    NamedTuple,
+    Sequence,
+    FrozenSet,
+    Iterable,
+)
 import datetime
 import collections
 import contextlib
@@ -30,7 +41,16 @@ import threading
 import time
 
 import atomicwrites
-from beancount.core.data import Open, Transaction, Balance, Commodity, Entries, Directive, Meta, Posting
+from beancount.core.data import (
+    Open,
+    Transaction,
+    Balance,
+    Commodity,
+    Entries,
+    Directive,
+    Meta,
+    Posting,
+)
 import beancount.core.data
 import beancount.loader
 import beancount.parser.printer
@@ -45,43 +65,59 @@ LineRange = Tuple[int, int]
 # -1 -> delete, 0 -> keep, +1 -> add
 LineChangeType = int
 
-line_change_indicators = {-1: '-', 0: ' ', 1: '+'}
+line_change_indicators = {-1: "-", 0: " ", 1: "+"}
 
 LineChange = Tuple[LineChangeType, str]
 
-LineChangeSet = NamedTuple('LineChangeSet', [
-    ('line_range', LineRange),
-    ('changes', List[LineChange]),
-])
+LineChangeSet = NamedTuple(
+    "LineChangeSet",
+    [
+        ("line_range", LineRange),
+        ("changes", List[LineChange]),
+    ],
+)
 
-FileChangeSet = NamedTuple('FileChangeSet', [
-    ('filename', str),
-    ('changes', Sequence[LineChangeSet]),
-])
+FileChangeSet = NamedTuple(
+    "FileChangeSet",
+    [
+        ("filename", str),
+        ("changes", Sequence[LineChangeSet]),
+    ],
+)
 
-JournalDiff = NamedTuple('JournalDiff', [
-    ('change_sets', List[FileChangeSet]),
-    ('old_entries', Entries),
-    ('new_entries', Entries),
-])
+JournalDiff = NamedTuple(
+    "JournalDiff",
+    [
+        ("change_sets", List[FileChangeSet]),
+        ("old_entries", Entries),
+        ("new_entries", Entries),
+    ],
+)
 
-ApplyFileChangesResult = NamedTuple('ApplyFileChangesResult', [
-    ('new_contents', str),
-    ('new_lines', List[str]),
-    ('lineno_map', Dict[int, Optional[int]]),
-    ('append_only', bool),
-])
+ApplyFileChangesResult = NamedTuple(
+    "ApplyFileChangesResult",
+    [
+        ("new_contents", str),
+        ("new_lines", List[str]),
+        ("lineno_map", Dict[int, Optional[int]]),
+        ("append_only", bool),
+    ],
+)
 
-ApplyStagedChangesResult = NamedTuple('ApplyStagedChangesResult', [
-    ('old_entries', Entries),
-    ('new_entries', Entries),
-    ('old_ignored_entries', Entries),
-    ('new_ignored_entries', Entries),
-])
+ApplyStagedChangesResult = NamedTuple(
+    "ApplyStagedChangesResult",
+    [
+        ("old_entries", Entries),
+        ("new_entries", Entries),
+        ("old_ignored_entries", Entries),
+        ("new_ignored_entries", Entries),
+    ],
+)
 
 
 def get_accounts_and_commodities(
-        entries: Entries) -> Tuple[Dict[str, Open], Dict[str, Commodity]]:
+    entries: Entries,
+) -> Tuple[Dict[str, Open], Dict[str, Commodity]]:
     """
     Preprocesses the entries of the journal.
 
@@ -103,6 +139,7 @@ def get_accounts_and_commodities(
             commodities[entry.currency] = entry
     return accounts, commodities
 
+
 _intercept_parse_file_lock = threading.Lock()
 
 
@@ -114,16 +151,17 @@ def _intercepted_parse_file(file_modification_times: Dict[str, float]):
         def intercept_parse_file(filename, **kw):
             real_filename = os.path.realpath(filename)
             try:
-                file_modification_times[real_filename] = os.stat(
-                    filename).st_mtime
+                file_modification_times[real_filename] = os.stat(filename).st_mtime
             except OSError:
                 pass
             return orig_parse_file(filename, **kw)
+
         beancount.parser.parser.parse_file = intercept_parse_file
         try:
             yield
         finally:
             beancount.parser.parser.parse_file = orig_parse_file
+
 
 _load_file_lock = threading.Lock()
 
@@ -164,35 +202,42 @@ def load_file(filename: str, encoding: Optional[str] = None):
                 [(filename, True)],
                 log_timings=None,
                 extra_validations=None,
-                encoding=encoding)
+                encoding=encoding,
+            )
         finally:
             beancount.parser.booking.book = orig_book_func
         assert pre_booking_entries is not None
         assert post_booking_entries is not None
-        return (entries, errors, options_map, pre_booking_entries,
-                post_booking_entries, file_modification_times)
+        return (
+            entries,
+            errors,
+            options_map,
+            pre_booking_entries,
+            post_booking_entries,
+            file_modification_times,
+        )
 
 
-def _partially_book_entry(orig_entry: Directive,
-                          booked_entry: Directive) -> Directive:
+def _partially_book_entry(orig_entry: Directive, booked_entry: Directive) -> Directive:
     """Computes a partially-booked entry.
 
     Given a pre-booking entry and a post-booking entry, returns a modified copy
     of the pre-booking entry that includes missing units.
 
     """
-    if not isinstance(orig_entry, Transaction): return orig_entry
+    if not isinstance(orig_entry, Transaction):
+        return orig_entry
     assert isinstance(booked_entry, Transaction)
     booked_postings_by_meta = dict()  # type: Dict[int, List[Posting]]
     for posting in booked_entry.postings:
         meta = posting.meta
-        if meta is None: continue
+        if meta is None:
+            continue
         booked_postings_by_meta.setdefault(id(meta), []).append(posting)
     partially_booked_postings = []  # type: List[Posting]
     empty_list = []  # type: List[Posting]
     for posting in orig_entry.postings:
-        booked_matches = booked_postings_by_meta.get(
-            id(posting.meta), empty_list)
+        booked_matches = booked_postings_by_meta.get(id(posting.meta), empty_list)
         if len(booked_matches) != 1:
             partially_booked_postings.append(posting)
             continue
@@ -203,8 +248,9 @@ def _partially_book_entry(orig_entry: Directive,
     return orig_entry._replace(postings=partially_booked_postings)
 
 
-def get_partially_booked_entries(pre_booking_entries: Entries,
-                                 post_booking_entries: Entries) -> Entries:
+def get_partially_booked_entries(
+    pre_booking_entries: Entries, post_booking_entries: Entries
+) -> Entries:
     """Computes a list of partially-booked entries.
 
     Given a list of pre-booking entries a list of post-booking entries, returns
@@ -214,23 +260,26 @@ def get_partially_booked_entries(pre_booking_entries: Entries,
     post_booking_entries_by_meta = dict()  # type: Dict[Tuple[str,int], Entries]
     for entry in post_booking_entries:
         meta = entry.meta
-        if meta is None: continue
-        lineno = meta.get('lineno')
-        filename = meta.get('filename')
-        if lineno is None or filename is None: continue
-        post_booking_entries_by_meta.setdefault((filename, lineno),
-                                                []).append(entry)
+        if meta is None:
+            continue
+        lineno = meta.get("lineno")
+        filename = meta.get("filename")
+        if lineno is None or filename is None:
+            continue
+        post_booking_entries_by_meta.setdefault((filename, lineno), []).append(entry)
     partially_booked_entries = []  # type: Entries
     empty_list = []  # type: Entries
     for entry in pre_booking_entries:
         meta = entry.meta
         post_booking_matches = post_booking_entries_by_meta.get(
-            (meta.get('filename'), meta.get('lineno')), empty_list)
+            (meta.get("filename"), meta.get("lineno")), empty_list
+        )
         if len(post_booking_matches) != 1:
             partially_booked_entries.append(entry)
             continue
         partially_booked_entries.append(
-            _partially_book_entry(entry, post_booking_matches[0]))
+            _partially_book_entry(entry, post_booking_matches[0])
+        )
     return partially_booked_entries
 
 
@@ -248,41 +297,52 @@ class _AtomicWriter(atomicwrites.AtomicWriter):
 
 
 def _get_journal_contents(filename: str):
-    with open(filename, 'r', encoding='utf-8') as f:
+    with open(filename, "r", encoding="utf-8") as f:
         return f.read()
 
 
 class JournalEditor(object):
-    def __init__(self, journal_path: str,
-                 ignored_path: Optional[str] = None) -> None:
+    def __init__(self, journal_path: str, ignored_path: Optional[str] = None) -> None:
 
         self.default_journal_load_time = time.time()
         journal_path = os.path.realpath(journal_path)
         self.journal_path = journal_path
 
-        (final_entries, self.errors, self.options_map, pre_booking_entries,
-         post_booking_entries,
-         self.journal_load_time) = load_file(journal_path)
+        (
+            final_entries,
+            self.errors,
+            self.options_map,
+            pre_booking_entries,
+            post_booking_entries,
+            self.journal_load_time,
+        ) = load_file(journal_path)
         del final_entries
-        self.entries = get_partially_booked_entries(pre_booking_entries,
-                                                    post_booking_entries)
+        self.entries = get_partially_booked_entries(
+            pre_booking_entries, post_booking_entries
+        )
         self.cached_lines = {}  # type: Dict[str, List[str]]
-        self.accounts, self.commodities = get_accounts_and_commodities(
-            self.entries)
-        journal_paths = [journal_path] + self.options_map['include']
+        self.accounts, self.commodities = get_accounts_and_commodities(self.entries)
+        journal_paths = [journal_path] + self.options_map["include"]
         ignored_journal_paths = []  # type: List[str]
         if ignored_path is not None:
             ignored_path = os.path.realpath(ignored_path)
             self.ignored_path = ignored_path  # type: Optional[str]
             with _intercepted_parse_file(self.journal_load_time):
-                (pre_booking_ignored_entries, ignored_errors,
-                 self.ignored_options_map) = beancount.loader._parse_recursive(
-                     [(ignored_path, True)], log_timings=False)
-            self.ignored_entries, ignored_balance_errors = beancount.parser.booking.book(
-                pre_booking_ignored_entries, self.ignored_options_map)
+                (
+                    pre_booking_ignored_entries,
+                    ignored_errors,
+                    self.ignored_options_map,
+                ) = beancount.loader._parse_recursive(
+                    [(ignored_path, True)], log_timings=False
+                )
+            self.ignored_entries, ignored_balance_errors = (
+                beancount.parser.booking.book(
+                    pre_booking_ignored_entries, self.ignored_options_map
+                )
+            )
             self.errors.extend(ignored_errors)
             ignored_journal_paths = [ignored_path]
-            ignored_journal_paths.extend(self.ignored_options_map['include'])
+            ignored_journal_paths.extend(self.ignored_options_map["include"])
             journal_paths.extend(ignored_journal_paths)
         else:
             self.ignored_entries = []
@@ -290,7 +350,8 @@ class JournalEditor(object):
             self.ignored_options_map = {}
         self.journal_filenames = set(os.path.realpath(x) for x in journal_paths)
         self.ignored_journal_filenames = set(
-            os.path.realpath(x) for x in ignored_journal_paths)
+            os.path.realpath(x) for x in ignored_journal_paths
+        )
         self._all_entries = None  # type: Optional[Entries]
 
     @property
@@ -304,18 +365,18 @@ class JournalEditor(object):
         filename = os.path.realpath(filename)
         if filename in self.cached_lines:
             return (filename, self.cached_lines[filename])
-        lines = _get_journal_contents(filename).split('\n')
+        lines = _get_journal_contents(filename).split("\n")
         self.cached_lines[filename] = lines
         return filename, lines
 
     def get_entry_line_range(self, entry: Directive):
-        filename, lines = self.get_journal_lines(entry.meta['filename'])
-        start_line = entry.meta['lineno'] - 1
+        filename, lines = self.get_journal_lines(entry.meta["filename"])
+        start_line = entry.meta["lineno"] - 1
         line_i = start_line + 1
         # Find last line of transaction
         # According to Beanacount grammer, each line of the entry must start with whitespace and contain a non-whitespace character.
         while line_i < len(lines):
-            if not re.match(r'^\s+[^\s]', lines[line_i]):
+            if not re.match(r"^\s+[^\s]", lines[line_i]):
                 break
             line_i += 1
         return filename, lines, (start_line, line_i)
@@ -333,9 +394,10 @@ class JournalEditor(object):
 
     def check_journal_modification(self, filename: str):
         mtime = os.stat(filename).st_mtime
-        check_mtime = self.journal_load_time.get(filename,
-                                                 self.default_journal_load_time)
-        return (mtime > check_mtime)
+        check_mtime = self.journal_load_time.get(
+            filename, self.default_journal_load_time
+        )
+        return mtime > check_mtime
 
     def check_any_journal_modification(self):
         modified_filenames = set()
@@ -345,8 +407,8 @@ class JournalEditor(object):
         return modified_filenames
 
     def _get_file_change_sets_result(
-            self, filename: str,
-            change_sets: Sequence[LineChangeSet]) -> ApplyFileChangesResult:
+        self, filename: str, change_sets: Sequence[LineChangeSet]
+    ) -> ApplyFileChangesResult:
         """Returns the new lines for `filename` after applying `change_sets`.
 
         This does not actually modify the specified file.
@@ -359,8 +421,9 @@ class JournalEditor(object):
 
         def fill_unchanged_lines(end_old_lineno):
             nonlocal next_new_lineno, next_old_lineno
-            assert end_old_lineno <= len(
-                old_lines) and end_old_lineno >= next_old_lineno
+            assert (
+                end_old_lineno <= len(old_lines) and end_old_lineno >= next_old_lineno
+            )
             new_lines.extend(old_lines[next_old_lineno:end_old_lineno])
             for i in range(next_old_lineno, end_old_lineno):
                 # +1 because beancount parser uses 1-based line numbers
@@ -375,8 +438,7 @@ class JournalEditor(object):
 
             if append_only:
                 if line_range[0] < len(old_lines):
-                    if line_range[0] != len(old_lines) - 1 or old_lines[
-                            -1].strip():
+                    if line_range[0] != len(old_lines) - 1 or old_lines[-1].strip():
                         # If changes start either before the last line or on the non-empty last
                         # line, then they are not append-only.
                         append_only = False
@@ -395,7 +457,7 @@ class JournalEditor(object):
             assert next_old_lineno == line_range[1]
 
         fill_unchanged_lines(len(old_lines))
-        new_data = '\n'.join(new_lines)
+        new_data = "\n".join(new_lines)
         return ApplyFileChangesResult(
             new_contents=new_data,
             new_lines=new_lines,
@@ -403,18 +465,17 @@ class JournalEditor(object):
             append_only=append_only,
         )
 
-    def apply_file_changes_result(self, filename: str,
-                                  result: ApplyFileChangesResult):
+    def apply_file_changes_result(self, filename: str, result: ApplyFileChangesResult):
         new_lines = result.new_lines
         new_data = result.new_contents
         lineno_map = result.lineno_map
         filename = os.path.realpath(filename)
         if self.check_journal_modification(filename):
-            raise RuntimeError(
-                'Journal file modified concurrently: %r' % filename)
+            raise RuntimeError("Journal file modified concurrently: %r" % filename)
 
         writer = _AtomicWriter(
-            filename, mode='w+', encoding='utf-8', newline='\n', overwrite=True)
+            filename, mode="w+", encoding="utf-8", newline="\n", overwrite=True
+        )
         with writer.open() as f:
             f.write(new_data)
         # On MS Windows, closing a file that has just been written causes the
@@ -442,16 +503,16 @@ class JournalEditor(object):
         def fix_meta(meta):
             if meta is None:
                 return
-            entry_filename = meta.get('filename', None)
+            entry_filename = meta.get("filename", None)
             if entry_filename is None:
                 return
             if get_realpath(entry_filename) != filename:
                 return
-            lineno = meta.get('lineno', None)
+            lineno = meta.get("lineno", None)
             # Automatic Document entries get a lineno of 0
             if lineno is None or lineno == 0:
                 return
-            meta['lineno'] = lineno_map[lineno]
+            meta["lineno"] = lineno_map[lineno]
 
         # Update lines of all entries
         if not result.append_only:
@@ -461,16 +522,15 @@ class JournalEditor(object):
                     for posting in entry.postings:
                         fix_meta(posting.meta)
 
-    def get_file_change_results(self, change_sets: List[FileChangeSet]
-                                ) -> Dict[str, ApplyFileChangesResult]:
+    def get_file_change_results(
+        self, change_sets: List[FileChangeSet]
+    ) -> Dict[str, ApplyFileChangesResult]:
         return {
-            x.filename: self._get_file_change_sets_result(
-                x.filename, x.changes)
+            x.filename: self._get_file_change_sets_result(x.filename, x.changes)
             for x in change_sets
         }
 
-    def apply_file_change_results(self,
-                                  results: Dict[str, ApplyFileChangesResult]):
+    def apply_file_change_results(self, results: Dict[str, ApplyFileChangesResult]):
         for filename, result in results.items():
             self.apply_file_changes_result(filename, result)
 
@@ -479,25 +539,31 @@ class JournalEditor(object):
         self.apply_file_change_results(results)
 
     def apply_staged_changes(
-            self, staged_changes: 'StagedChanges') -> ApplyStagedChangesResult:
+        self, staged_changes: "StagedChanges"
+    ) -> ApplyStagedChangesResult:
         change_sets, old_entries, new_entries = staged_changes.get_diff()
         self.apply_change_sets(change_sets)
         old_entries_set = set(map(id, old_entries))
         self.entries = [
-            e for e in self.entries
-            if id(e) not in old_entries_set and e.meta.get('lineno') is not None
+            e
+            for e in self.entries
+            if id(e) not in old_entries_set and e.meta.get("lineno") is not None
         ]
         self.ignored_entries = [
-            e for e in self.ignored_entries
-            if id(e) not in old_entries_set and e.meta.get('lineno') is not None
+            e
+            for e in self.ignored_entries
+            if id(e) not in old_entries_set and e.meta.get("lineno") is not None
         ]
         booked_new_entries, balance_errors = beancount.parser.booking.book(
-            new_entries, self.options_map)
+            new_entries, self.options_map
+        )
         non_ignored_booked_new_entries = []  # type: Entries
         ignored_booked_new_entries = []  # type: Entries
         for entry in booked_new_entries:
-            if os.path.realpath(entry.meta.get(
-                    'filename')) in self.ignored_journal_filenames:
+            if (
+                os.path.realpath(entry.meta.get("filename"))
+                in self.ignored_journal_filenames
+            ):
                 self.ignored_entries.append(entry)
                 ignored_booked_new_entries.append(entry)
             else:
@@ -513,25 +579,33 @@ class JournalEditor(object):
         self._all_entries = None
         return ApplyStagedChangesResult(
             old_entries=[
-                e for e in old_entries
-                if os.path.realpath(e.meta.get('filename')) not in self.
-                ignored_journal_filenames
+                e
+                for e in old_entries
+                if os.path.realpath(e.meta.get("filename"))
+                not in self.ignored_journal_filenames
             ],
             new_entries=non_ignored_booked_new_entries,
             old_ignored_entries=[
-                e for e in old_entries if os.path.realpath(
-                    e.meta.get('filename')) in self.ignored_journal_filenames
+                e
+                for e in old_entries
+                if os.path.realpath(e.meta.get("filename"))
+                in self.ignored_journal_filenames
             ],
             new_ignored_entries=ignored_booked_new_entries,
         )
 
-    def stage_changes(self) -> 'StagedChanges':
+    def stage_changes(self) -> "StagedChanges":
         return StagedChanges(self)
 
 
 class LineChangeBuilder(object):
-    def __init__(self, filename: str, lines: Sequence[str],
-                 line_range: Tuple[int, int], line_delta: int) -> None:
+    def __init__(
+        self,
+        filename: str,
+        lines: Sequence[str],
+        line_range: Tuple[int, int],
+        line_delta: int,
+    ) -> None:
         self.filename = filename
         self.lines = lines
         self.line_range = line_range
@@ -541,10 +615,10 @@ class LineChangeBuilder(object):
 
     def set_metadata(self, x: Directive, lineno: Optional[int] = None):
         meta = dict({}, **(x.meta or {}))
-        meta['filename'] = self.filename
+        meta["filename"] = self.filename
         if lineno is None:
             lineno = self.new_lineno + 1
-        meta['lineno'] = lineno
+        meta["lineno"] = lineno
         return x._replace(meta=meta)
 
     def keep_line(self):
@@ -579,7 +653,8 @@ class LineChangeBuilder(object):
         assert count >= 0
         assert new_orig_lineno <= len(self.lines)
         self.changes.extend(
-            (-1, line) for line in self.lines[self.orig_lineno:new_orig_lineno])
+            (-1, line) for line in self.lines[self.orig_lineno : new_orig_lineno]
+        )
         self.orig_lineno = new_orig_lineno
 
     def delete_until(self, final_orig_lineno: int):
@@ -587,15 +662,14 @@ class LineChangeBuilder(object):
 
     def ensure_blank_line(self):
         if self.orig_lineno > 0 and self.lines[self.orig_lineno - 1].strip():
-            self.add_lines('')
+            self.add_lines("")
 
     def match_metadata(self, meta: Meta):
-        assert os.path.realpath(meta['filename']) == self.filename
-        assert meta['lineno'] == self.orig_lineno + 1
+        assert os.path.realpath(meta["filename"]) == self.filename
+        assert meta["lineno"] == self.orig_lineno + 1
 
     def raise_error(self, message: str):
-        raise RuntimeError(
-            '%s:%d: %s' % (self.filename, self.orig_lineno, message))
+        raise RuntimeError("%s:%d: %s" % (self.filename, self.orig_lineno, message))
 
     @property
     def change_set(self) -> LineChangeSet:
@@ -618,26 +692,27 @@ class FileChangeSetsBuilder(object):
             filename=self.filename,
             lines=self.lines,
             line_range=line_range,
-            line_delta=line_delta)
+            line_delta=line_delta,
+        )
         self.builders.append(builder)
         return builder
 
     @property
     def change_sets(self) -> FileChangeSet:
-        return FileChangeSet(self.filename,
-                             [x.change_set for x in self.builders])
+        return FileChangeSet(self.filename, [x.change_set for x in self.builders])
 
 
 def get_meta_ignore() -> FrozenSet[str]:
     printer = beancount.parser.printer.EntryPrinter()
     meta_ignore = set(printer.META_IGNORE)
-    meta_ignore.add('__tolerances__')
+    meta_ignore.add("__tolerances__")
+    meta_ignore.add("__automatic__")
     return frozenset(meta_ignore)
 
 
 META_IGNORE = get_meta_ignore()
 
-metadata_line_re = '^ +([a-z][a-zA-Z0-9\\-_]*) *: *([^a-zA-Z].*)$'
+metadata_line_re = "^ +([a-z][a-zA-Z0-9\\-_]*) *: *([^a-zA-Z].*)$"
 
 
 def compute_metadata_changes(builder, old_meta, new_meta, indent):
@@ -645,7 +720,7 @@ def compute_metadata_changes(builder, old_meta, new_meta, indent):
 
     def format_metadata_line(key):
         oss = io.StringIO()
-        printer.write_metadata({key: new_meta[key]}, oss, prefix=' ' * indent)
+        printer.write_metadata({key: new_meta[key]}, oss, prefix=" " * indent)
         return oss.getvalue().rstrip()
 
     old_meta_not_seen = set(old_meta.keys())
@@ -659,7 +734,7 @@ def compute_metadata_changes(builder, old_meta, new_meta, indent):
             break
         key = m.group(1)
         if key not in old_meta_not_seen:
-            builder.raise_error('unexpected metadata key %r found' % (key, ))
+            builder.raise_error("unexpected metadata key %r found" % (key,))
         old_meta_not_seen.remove(key)
         if key not in new_meta:
             builder.delete_line()
@@ -668,7 +743,7 @@ def compute_metadata_changes(builder, old_meta, new_meta, indent):
         else:
             builder.keep_line()
     if old_meta_not_seen:
-        builder.raise_error('expected metadata keys %r' % (old_meta_not_seen, ))
+        builder.raise_error("expected metadata keys %r" % (old_meta_not_seen,))
     for key in new_meta:
         if key in META_IGNORE or key in old_meta:
             continue
@@ -678,11 +753,12 @@ def compute_metadata_changes(builder, old_meta, new_meta, indent):
 def get_posting_line(posting: Posting) -> str:
     printer = beancount.parser.printer.EntryPrinter()
     flag_account, position_str, _ = printer.render_posting_strings(posting)
-    return ('  %s  %s' % (flag_account, position_str)).rstrip()
+    return ("  %s  %s" % (flag_account, position_str)).rstrip()
 
 
-def compute_posting_changes(builder: LineChangeBuilder, old_posting: Posting,
-                            new_posting: Posting):
+def compute_posting_changes(
+    builder: LineChangeBuilder, old_posting: Posting, new_posting: Posting
+):
     builder.match_metadata(old_posting.meta)
     old_posting_line = get_posting_line(old_posting)
     new_posting_line = get_posting_line(new_posting)
@@ -691,43 +767,43 @@ def compute_posting_changes(builder: LineChangeBuilder, old_posting: Posting,
     else:
         builder.replace_line(new_posting_line)
     compute_metadata_changes(
-        builder=builder,
-        old_meta=old_posting.meta,
-        new_meta=new_posting.meta,
-        indent=4)
+        builder=builder, old_meta=old_posting.meta, new_meta=new_posting.meta, indent=4
+    )
 
 
 class StagedChanges(object):
     def __init__(self, journal_editor: JournalEditor) -> None:
         self.journal_editor = journal_editor
-        self.changed_entries = collections.OrderedDict(
+        self.changed_entries = (
+            collections.OrderedDict()
         )  # type: Dict[str, List[Tuple[Optional[Directive], Optional[Directive]]]]
         self._cached_diff = None  # type: Optional[JournalDiff]
 
     def add_entry(self, new_entry: Directive, output_filename: str):
-        self.changed_entries.setdefault(os.path.realpath(output_filename),
-                                        []).append((None, new_entry))
+        self.changed_entries.setdefault(os.path.realpath(output_filename), []).append(
+            (None, new_entry)
+        )
         self._cached_diff = None
 
     def remove_entry(self, old_entry: Directive):
-        if 'filename' not in old_entry.meta or 'lineno' not in old_entry.meta:
-            raise ValueError('Cannot remove entry without filename and line')
+        if "filename" not in old_entry.meta or "lineno" not in old_entry.meta:
+            raise ValueError("Cannot remove entry without filename and line")
         self.changed_entries.setdefault(
-            os.path.realpath(old_entry.meta['filename']), []).append((old_entry,
-                                                                      None))
+            os.path.realpath(old_entry.meta["filename"]), []
+        ).append((old_entry, None))
         self._cached_diff = None
 
     def change_entry(self, old_entry: Directive, new_entry: Directive):
         if not isinstance(old_entry, Transaction) or not isinstance(
-                new_entry, Transaction):
-            raise NotImplementedError('only Transaction entries supported')
+            new_entry, Transaction
+        ):
+            raise NotImplementedError("only Transaction entries supported")
         self.changed_entries.setdefault(
-            os.path.realpath(old_entry.meta['filename']), []).append(
-                (old_entry, new_entry))
+            os.path.realpath(old_entry.meta["filename"]), []
+        ).append((old_entry, new_entry))
         self._cached_diff = None
 
-    def make_with_new_output_filename(self,
-                                      output_filename: str) -> 'StagedChanges':
+    def make_with_new_output_filename(self, output_filename: str) -> "StagedChanges":
         new_stage = StagedChanges(self.journal_editor)
         for change_pairs in self.changed_entries.values():
             for old_entry, new_entry in change_pairs:
@@ -735,9 +811,9 @@ class StagedChanges(object):
                     new_stage.add_entry(new_entry, output_filename)
                 elif new_entry is None:
                     new_stage.remove_entry(old_entry)
-                elif os.path.realpath(
-                        old_entry.meta['filename']) == os.path.realpath(
-                            output_filename):
+                elif os.path.realpath(old_entry.meta["filename"]) == os.path.realpath(
+                    output_filename
+                ):
                     new_stage.change_entry(old_entry, new_entry)
                 else:
                     new_stage.remove_entry(old_entry)
@@ -747,12 +823,13 @@ class StagedChanges(object):
     def get_all_new_entries(self):
         """Returns a sequence of the new entries WITHOUT updated line numbers."""
         return [
-            new_entry for _, changed_entries in self.changed_entries.items()
+            new_entry
+            for _, changed_entries in self.changed_entries.items()
             for _, new_entry in changed_entries
         ]
 
     def get_all_accounts(
-            self, account_map: Optional[Dict[str, str]] = None
+        self, account_map: Optional[Dict[str, str]] = None
     ) -> Tuple[Dict[str, Tuple[datetime.date, Set[str]]], Set[str]]:
         """Returns an account -> (date, currencies) dict, as well as the set of accounts listed in open directives."""
 
@@ -761,15 +838,19 @@ class StagedChanges(object):
                 return account
             return account_map.get(account, account)
 
-        accounts = collections.OrderedDict(
+        accounts = (
+            collections.OrderedDict()
         )  # type: Dict[str, Tuple[datetime.date, Set[str]]]
         open_accounts = set()
 
-        def add_account(account: str, date: datetime.date, currencies: Optional[Iterable[str]]):
+        def add_account(
+            account: str, date: datetime.date, currencies: Optional[Iterable[str]]
+        ):
             if currencies is None:
                 currencies = set()
             existing_date, existing_currencies = accounts.setdefault(
-                account, (date, set(currencies)))
+                account, (date, set(currencies))
+            )
             existing_currencies.update(currencies)
             if existing_date > date:
                 existing_date = date
@@ -782,8 +863,8 @@ class StagedChanges(object):
                 add_account(account, entry.date, entry.currencies)
             elif isinstance(entry, Balance):
                 add_account(
-                    map_account(entry.account), entry.date,
-                    [entry.amount.currency])
+                    map_account(entry.account), entry.date, [entry.amount.currency]
+                )
             elif isinstance(entry, Transaction):
                 other_currencies = set()  # type: Set[str]
                 for posting in entry.postings:
@@ -802,17 +883,17 @@ class StagedChanges(object):
                             currencies = []
                     else:
                         currencies = [posting.units.currency]
-                    add_account(
-                        map_account(posting.account), entry.date, currencies)
+                    add_account(map_account(posting.account), entry.date, currencies)
         return accounts, open_accounts
 
-    def get_missing_accounts(self,
-                             account_map: Optional[Dict[str, str]] = None):
+    def get_missing_accounts(self, account_map: Optional[Dict[str, str]] = None):
         referenced_accounts, open_accounts = self.get_all_accounts(account_map)
         accounts = self.journal_editor.accounts
-        return [(account, date, currencies) for account,
-                (date, currencies) in referenced_accounts.items()
-                if account not in accounts and account not in open_accounts]
+        return [
+            (account, date, currencies)
+            for account, (date, currencies) in referenced_accounts.items()
+            if account not in accounts and account not in open_accounts
+        ]
 
     def get_diff(self) -> JournalDiff:
         if self._cached_diff is not None:
@@ -825,46 +906,51 @@ class StagedChanges(object):
         printer = SortedEntryPrinter()
 
         for filename, changed_entries in self.changed_entries.items():
-            changed_entries.sort(key=lambda x: float('inf')
-                                 if x[0] is None else x[0].meta['lineno'])
+            changed_entries.sort(
+                key=lambda x: float("inf") if x[0] is None else x[0].meta["lineno"]
+            )
             _, lines = self.journal_editor.get_journal_lines(filename)
-            change_sets_builder = FileChangeSetsBuilder(
-                filename=filename, lines=lines)
+            change_sets_builder = FileChangeSetsBuilder(filename=filename, lines=lines)
             for old_entry, new_entry in changed_entries:
                 if new_entry is None:
                     # Remove entry
                     _, _, line_range = self.journal_editor.get_entry_line_range(
-                        old_entry)
+                        old_entry
+                    )
                     start_line = line_range[0]
 
                     # Move start line up until non-whitespace line
                     while start_line > 0 and not lines[start_line - 1].strip():
                         start_line -= 1
 
-                    builder = change_sets_builder.add_builder((start_line,
-                                                               line_range[1]))
+                    builder = change_sets_builder.add_builder(
+                        (start_line, line_range[1])
+                    )
                     builder.delete_until(line_range[1])
                     old_entries.append(old_entry)
                 elif old_entry is None:
                     # Add new entry
 
                     _, _, line_range = self.journal_editor.get_append_line_range(
-                        filename)
+                        filename
+                    )
                     builder = change_sets_builder.add_builder(line_range)
                     builder.ensure_blank_line()
                     new_entry = builder.set_metadata(new_entry)
                     if isinstance(new_entry, Transaction):
                         new_postings = []  # type: List[Posting]
-                        cur_lineno = new_entry.meta['lineno'] + 1 + len(
-                            new_entry.meta.keys() - META_IGNORE)
+                        cur_lineno = (
+                            new_entry.meta["lineno"]
+                            + 1
+                            + len(new_entry.meta.keys() - META_IGNORE)
+                        )
                         for posting in new_entry.postings:
                             posting = builder.set_metadata(posting, cur_lineno)
-                            cur_lineno += 1 + len(posting.meta.keys() -
-                                                  META_IGNORE)
+                            cur_lineno += 1 + len(posting.meta.keys() - META_IGNORE)
                             new_postings.append(posting)
                         new_entry = new_entry._replace(postings=new_postings)
                     new_entries.append(new_entry)
-                    added_lines = printer(new_entry).strip('\n').split('\n')
+                    added_lines = printer(new_entry).strip("\n").split("\n")
                     added_lines = [x.rstrip() for x in added_lines]
                     builder.add_lines(added_lines)
 
@@ -872,10 +958,11 @@ class StagedChanges(object):
                     # Change entry
 
                     _, _, line_range = self.journal_editor.get_entry_line_range(
-                        old_entry)
+                        old_entry
+                    )
                     builder = change_sets_builder.add_builder(line_range)
-                    old_print_result = printer(old_entry).split('\n')
-                    new_print_result = printer(new_entry).split('\n')
+                    old_print_result = printer(old_entry).split("\n")
+                    new_print_result = printer(new_entry).split("\n")
                     new_entry = builder.set_metadata(new_entry)
                     if old_print_result[0] == new_print_result[0]:
                         # First line is the same
@@ -886,9 +973,11 @@ class StagedChanges(object):
                         builder=builder,
                         old_meta=old_entry.meta,
                         new_meta=new_entry.meta,
-                        indent=2)
+                        indent=2,
+                    )
                     assert isinstance(old_entry, Transaction) == isinstance(
-                        new_entry, Transaction)
+                        new_entry, Transaction
+                    )
                     if isinstance(old_entry, Transaction):
                         # handle postings
                         next_old_posting_i = 0
@@ -897,25 +986,24 @@ class StagedChanges(object):
                             new_posting = builder.set_metadata(new_posting)
                             new_postings.append(new_posting)
                             if next_old_posting_i < len(old_entry.postings):
-                                old_posting = old_entry.postings[
-                                    next_old_posting_i]
+                                old_posting = old_entry.postings[next_old_posting_i]
                                 # posting replaces old_posting
                                 compute_posting_changes(
                                     builder=builder,
                                     old_posting=old_posting,
-                                    new_posting=new_posting)
+                                    new_posting=new_posting,
+                                )
                                 next_old_posting_i += 1
                             else:
                                 new_posting_lines = []
-                                new_posting_lines.append(
-                                    get_posting_line(new_posting))
+                                new_posting_lines.append(get_posting_line(new_posting))
                                 oss = io.StringIO()
                                 printer.write_metadata(
-                                    new_posting.meta, oss, prefix='    ')
-                                metadata_text = oss.getvalue().strip('\n')
+                                    new_posting.meta, oss, prefix="    "
+                                )
+                                metadata_text = oss.getvalue().strip("\n")
                                 if metadata_text:
-                                    new_posting_lines.extend(
-                                        metadata_text.split('\n'))
+                                    new_posting_lines.extend(metadata_text.split("\n"))
                                 builder.add_lines(new_posting_lines)
                         # Delete all remaining old postings
                         builder.delete_until(builder.line_range[1])
@@ -942,11 +1030,10 @@ class StagedChanges(object):
     def get_textual_diff(self) -> str:
         out = io.StringIO()
         for filename, file_change_set in self.get_diff().change_sets:
-            out.write(filename + '\n')
+            out.write(filename + "\n")
             for _, line_changes in file_change_set:
                 for change_type, line in line_changes:
-                    out.write(
-                        '%s%s\n' % (line_change_indicators[change_type], line))
+                    out.write("%s%s\n" % (line_change_indicators[change_type], line))
         return out.getvalue()
 
     def get_modified_filenames(self) -> List[str]:
