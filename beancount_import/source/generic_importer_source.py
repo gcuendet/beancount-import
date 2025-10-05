@@ -56,7 +56,7 @@ class ImporterSource(DescriptionBasedSource):
 
     @property
     def name(self) -> str:
-        return self.importer.name()
+        return self.importer.name
 
     def prepare(self, journal: "JournalEditor", results: SourceResults) -> None:
         results.add_account(self.account)
