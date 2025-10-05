@@ -52,7 +52,7 @@ class ImporterSource(DescriptionBasedSource):
             )
         ]
         # filter the valid files for this importer
-        self.files = [f for f in files if self.importer.identify(f)]
+        self.files = [f for f in files if self.importer.identify(f.name)]
 
     @property
     def name(self) -> str:
@@ -63,7 +63,7 @@ class ImporterSource(DescriptionBasedSource):
 
         entries = OrderedDict()  # type: Dict[Hashable, List[Directive]]
         for f in self.files:
-            f_entries = self.importer.extract(f, existing_entries=journal.entries)
+            f_entries = self.importer.extract(f.name, existing=journal.entries)
             # collect  all entries in current statement, grouped by hash
             hashed_entries = OrderedDict()  # type: Dict[Hashable, Directive]
             for entry in f_entries:
@@ -156,7 +156,7 @@ def get_info(raw_entry: Directive) -> dict:
     if raw_entry.meta["filename"].endswith(".beancount"):
         ftype = "text/plain"
     else:
-        ftype = get_file(raw_entry.meta["filename"]).mimetype()
+        ftype = get_file(os.path.abspath(raw_entry.meta["filename"])).mimetype()
     return dict(
         type=ftype,
         filename=raw_entry.meta["filename"],
